@@ -1,0 +1,379 @@
+<html>
+    <head>
+        <!-- Do everything inline so we can just run from the one file. -->
+        <style>
+            body {
+                font-family: Helvetica, sans-serif;
+                line-height: 1.3;
+                color: #333;
+                text-align: center;
+                margin-left: auto;
+                margin-right: auto;
+                margin-top: 20px;
+            }
+
+            #game-over {
+                display: none;
+                opacity: 0;
+
+                font-size: 48px;
+                font-weight: 800;
+                position: absolute;
+                top: 150px;
+                width: 300px;
+                text-align: center;
+                margin-left: -150px;
+                text-transform: lowercase;
+                left: 50%;
+                transition: opacity .5s;
+            }
+
+            #game-over button {
+                margin-top: 20px;
+                background: #080;
+                color: white;
+                font-size: 24px;
+                text-transform: lowercase;
+                padding: 10px;
+                width: 100%;
+                box-sizing: border-box;
+                border: none;
+            }
+
+            #help {
+                display: inline-block;
+                width: 0px;
+                text-align: left;
+                transition: width 0.5s;
+                vertical-align: top;
+                overflow: hidden;
+            }
+
+            #help .inner {
+                width: 512px;
+            }
+
+            .help-btn {
+                font-size: 26px;
+                transition: opacity .5s;
+                color: #080;
+                cursor: pointer;
+            }
+
+            .help-btn.show {
+                display: inline-block;
+                vertical-align: top;
+            }
+
+            .help-btn.hide {
+                line-height: 40px;
+                float: left;
+                padding-right: 10px;
+            }
+
+            .panel label {
+                font-size: 9px;
+                display: block;
+            }
+
+            .score {
+                min-width: 150px;
+                display: inline-block;
+                font-size: 24px;
+                margin-bottom: 10px;
+            }
+
+            .game {
+                position: relative;
+                display: inline-block;
+            }
+
+            canvas {
+                margin: auto;
+            }
+
+            h1 {
+                text-align: center;
+            }
+        </style>
+        <title>The Automataic Gardener</title>
+
+         <script type="text/javascript">
+            var WIDTH = 64;
+            var HEIGHT = 64;
+            var CELL_SIZE = 8;
+
+
+            function cell(x, y) {
+                if(x >= WIDTH || x < 0 || y >= HEIGHT || y < 0) return 0;
+
+                return y*WIDTH + x;
+            }
+
+            /** Game logic **/
+
+            var world = new Uint8Array(new ArrayBuffer(WIDTH*HEIGHT));
+            var update = new Uint8Array(new ArrayBuffer(WIDTH*HEIGHT));
+            var freshness = new Uint8Array(new ArrayBuffer(WIDTH*HEIGHT));
+
+            var changes = 0;
+            var rate = 0;
+            var running = false;
+
+            var interval;
+
+            function init() {
+                if(running) return;
+                running = true;
+
+                for(var i=0; i<WIDTH*HEIGHT; i++) {
+                    world[i] = 0;
+                    update[i] = 0;
+                    freshness[i] = 255;
+                }
+
+                changes = 0;
+                player.seeds = 32;
+
+                if(interval) clearInterval(interval);
+                interval = setInterval(function() {
+                    updateWorld();
+                    drawWorld();
+                }, 75);
+
+
+                document.getElementById("game-over").style.opacity = 0;
+                setTimeout(function() {document.getElementById("game-over").style.display = "none";}, 500);
+            }
+
+            function updateWorld() {
+                var x, y, i, j, res, total, cur, offset;
+
+                rate = 0;
+
+                if(player.seeds < 24) { //season starts at 24 seeds left
+                    for(x=0; x<WIDTH; x++) {
+                        for(y=0; y<HEIGHT; y++) {
+                            total = 0;
+                            offset = cell(x, y);
+                            cur = world[offset];
+
+                            if(freshness[offset] > 2) {
+                                total = world[cell(x-1, y-1)] + world[cell(x, y-1)] + world[cell(x+1, y-1)] +
+                                        world[cell(x-1, y)] +                         world[cell(x+1, y)] +
+                                        world[cell(x-1, y+1)] + world[cell(x, y+1)] + world[cell(x+1, y+1)];
+
+                                res = (cur && total == 2) || total == 3;
+
+                                if(cur != res) {
+                                    freshness[offset]-=2;
+                                    changes++;
+                                    rate++;
+                                }
+                            }
+                            else {
+                                res = 0;
+                            }
+
+                            update[offset] = res;
+
+                            //if(freshness[offset] < 255) freshness[offset]++;
+                        }
+                    }
+
+                    var swap = world;
+                    world = update;
+                    update = swap;
+                }
+
+                player.update();
+
+                // no more seeds and no more changes? Game over!
+                if(player.seeds <= 0 && rate <= 0) {
+                    running = false;
+                    clearInterval(interval);
+                    document.getElementById("game-over").style.display = "block";
+
+                    // have to defer or webkit won't run our css transition
+                    setTimeout(function() {document.getElementById("game-over").style.opacity = 1;}, 1);
+                }
+            }
+
+            function drawWorld() {
+                var canvas = document.getElementById('view');
+                var ctx = canvas.getContext('2d');
+                var x, y;
+                var freshcolor;
+
+                ctx.fillStyle = "rgb(255, 255, 255)";
+                ctx.fillRect(0, 0, WIDTH*CELL_SIZE, HEIGHT*CELL_SIZE);
+
+                for(x=0; x<WIDTH; x++) {
+                    for(y=0; y<HEIGHT; y++) {
+                        freshcolor = (freshness[cell(x, y)]/2|0) + 128;
+                        ctx.fillStyle = 'rgb('+[freshcolor, freshcolor, freshcolor].join(',')+')';
+                        ctx.fillRect(x*CELL_SIZE, y*CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                    }
+                }
+
+                ctx.fillStyle = "rgb(0, 128, 0)";
+
+                for(x=0; x<WIDTH; x++) {
+                    for(y=0; y<HEIGHT; y++) {
+                        if(world[cell(x, y)]) {
+                            ctx.fillRect(x*CELL_SIZE+1, y*CELL_SIZE+1, CELL_SIZE-2, CELL_SIZE-2);
+                        }
+                    }
+                }
+
+                player.draw(ctx);
+
+                document.getElementById("changes").innerHTML = changes;
+                document.getElementById("rate").innerHTML = rate;
+                document.getElementById("seeds").innerHTML = player.seeds;
+            }
+
+            /** Player avatar **/
+
+            var player = new function() {
+                var x = WIDTH/2|0;
+                var y = HEIGHT/2|0;
+                var reach = 3;
+                var dx = reach;
+                var dy = 0;
+
+                this.seeds = 32;
+
+                this.draw = function(ctx) {
+                    ctx.fillStyle = 'rgba(128, 128, 128, 0.8)';
+                    ctx.fillRect((x-1)*CELL_SIZE, (y-1)*CELL_SIZE, CELL_SIZE*3, CELL_SIZE*3);
+                    ctx.fillRect((x+dx)*CELL_SIZE, (y+dy)*CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                };
+
+                this.update = function() {
+                    if(this.keyLeft) {
+                        x--;
+                        dx = -reach;
+                        dy = 0;
+                    }
+                    else if(this.keyRight) {
+                        x++;
+                        dx = reach;
+                        dy = 0;
+                    }
+                    else if(this.keyUp) {
+                        y--;
+                        dx = 0;
+                        dy = -reach;
+                    }
+                    else if(this.keyDown) {
+                        y++;
+                        dx = 0;
+                        dy = reach;
+                    }
+
+                    if(this.keyPlant) {
+                        if(this.seeds <= 0) return;
+
+                        this.keyPlant = false;
+                        this.seeds--;
+                        world[cell(x+dx-1, y+dy)] = 1;
+                        world[cell(x+dx+1, y+dy)] = 1;
+                        world[cell(x+dx, y+dy-1)] = 1;
+                        world[cell(x+dx, y+dy+1)] = 1;
+                    }
+
+                    world[cell(x, y)] = 0;
+                };
+            }
+
+            /** Input **/
+            var keybinds = {};
+
+            document.onkeydown = function(e) {
+                if(keybinds[e.keyCode]) {
+                    keybinds[e.keyCode](e, true);
+                    e.preventDefault();
+                    return false;
+                }
+            }
+
+            document.onkeyup = function(e) {
+                if(keybinds[e.keyCode]) {
+                    keybinds[e.keyCode](e, false);
+                    e.preventDefault();
+                    return false;
+                }
+            }
+
+            keybinds[37] = function(e, down) {
+                player.keyLeft = down;
+            };
+
+            keybinds[38] = function(e, down) {
+                player.keyUp = down;
+            };
+
+            keybinds[39] = function(e, down) {
+                player.keyRight = down;
+            };
+
+            keybinds[40] = function(e, down) {
+                player.keyDown = down;
+            };
+
+            keybinds[32] = function(e, down) {
+                player.keyPlant = down;
+            };
+
+            function showHelp() {
+                document.getElementById("help").style.width = "512px";
+                document.getElementById("show-help").style.opacity = 0;
+            }
+
+            function hideHelp() {
+                document.getElementById("help").style.width = "0";
+                document.getElementById("show-help").style.opacity = 1;
+            }
+        </script>
+    </head>
+    <body onload="init();">
+        <h1>The Automataic Gardener</h1>
+        <div class="game">
+            <canvas id="view" width="512" height="512"></canvas>
+            <div id="game-over">Game over!<button onclick="init()">New Game</button></div>
+            <div class="panel">
+                <div class="score"><label>Changes</label> <span id="changes">0</span></div>
+                <div class="score"><label>Rate</label> <span id="rate">0</span></div>
+                <div class="score"><label>Seeds</label> <span id="seeds">0</span></div>
+            </div>
+        </div>
+        <aside id="help">
+            <div class="inner">
+                <a id="hide-help" title="Hide info" class="hide help-btn" onclick="hideHelp()">&laquo;</a>
+                A little meditation on embodiment, change, and time inspired by
+                <a href=“http://en.wikipedia.org/wiki/Conway's_Game_of_Life”>Conway's Game of Life.</a>
+
+                You are a gardener planting seeds. You have 32 seeds and are trying to grow as many
+                plants as you can. You plant the first seven seeds during the winter when nothing grows
+                or dies. When you plant the eighth seed, the growing season begins, and the seeds grow
+                into plants that spread and eventually die. Once you've planted all your seeds and
+                the last plant dies, the growing season ends.<p>
+
+                The rules that determine whether a seed grows or dies are the same as Conway's Game of Life:
+
+                <ol>
+                    <li>Any live plant with fewer than two live neighbors dies, as if caused by under-population.
+                    <li>Any live plant with two or three live neighbors lives on to the next generation.
+                    <li>Any live plant with more than three live neighbors dies, as if by overcrowding.
+                    <li>Any dead plant with exactly three live neighbors becomes a live cell, as if by reproduction.
+                    <li>Additionally, when there is too much activity in a space, it gets overcultivated,
+                        and the ground turns increasingly darker shades of gray. Ground that becomes
+                        extremely overcultivated can no longer support life.
+                </ol>
+                Controls: Arrow keys to move, [space] to plant seeds around your spade (the little grey dot).
+            </div>
+        </aside>
+        <a id="show-help" title="Show info" class="show help-btn" onclick="showHelp()">&#9776;</a>
+    </body>
+</html>
