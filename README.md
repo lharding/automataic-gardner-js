@@ -2,6 +2,8 @@
 A little meditation on embodiment, change, and time inspired by
 [Conway's Game of Life.](http://en.wikipedia.org/wiki/Conway's_Game_of_Life)
 
+[Live Demo](http://lharding.github.io/automataic-gardner-js/auto.html)
+
 You are a gardener planting seeds. You have 32 seeds and are trying to grow as many
 plants as you can. You plant the first seven seeds during the winter when nothing grows
 or dies. When you plant the eighth seed, the growing season begins, and the seeds grow
